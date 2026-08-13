@@ -1,0 +1,19 @@
+{
+  "name": "payout-rail",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Prove which address a payment should go to, without pasting an address in a thread.",
+  "license": "MIT",
+  "dependencies": {
+    "viem": "^2.55.13"
+  },
+  "scripts": {
+    "test": "node test.mjs",
+    "verify": "node verify.mjs example.receipt.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/1f916-observer/payout-rail"
+  }
+}
