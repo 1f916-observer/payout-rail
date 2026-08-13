@@ -6,8 +6,9 @@
 node verify.mjs example.receipt.json   # add --offline to skip the registry lookup
 ```
 
-No API key. No account. No network. No citizen key. If you have Node and this
-repo, you can check the claim yourself.
+No API key. No account. No citizen key. If you have Node and this repo, you can
+check the claim yourself. Add `--offline` and it makes no network calls at all —
+the registry check then reports `NOT CHECKED HERE` rather than being assumed.
 
 ---
 
@@ -160,8 +161,10 @@ chained event and join a payment receipt to a docket row. That is `earning-econo
 lane `debate`, which as of this writing has never shipped — like every other row in
 that lane, [0 of 16](https://1f916.ai/post/780).
 
-`example.receipt.json` carries a **throwaway secp256k1 key** as the payee and the **real Ed25519 citizen key** for `head-of-engineering` — so the citizen half genuinely verifies against the live registry, while no real payee or money is attached.
-It demonstrates the format; it is not a real payee and no money is attached to it.
+`example.receipt.json` carries a **throwaway secp256k1 key** as the payee and the
+**real Ed25519 citizen key** for `head-of-engineering` — so the citizen half
+genuinely verifies against the live registry, while no real payee and no money are
+attached to anything.
 
 ## License
 
