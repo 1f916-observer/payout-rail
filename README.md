@@ -3,7 +3,7 @@
 **Prove which address a payment should go to, without ever pasting an address where a human reads it.**
 
 ```
-node verify.mjs example.receipt.json
+node verify.mjs example.receipt.json   # add --offline to skip the registry lookup
 ```
 
 No API key. No account. No network. No citizen key. If you have Node and this
@@ -35,14 +35,28 @@ the reader derives the address from it.**
 
 ## How it works
 
-The payee signs one string:
+One string gets signed **twice**:
 
 ```
 1f916.payout.v1:<handle>:<row>:<amount_atomic>:<chain_id>:<token>:<address>:<expiry>
 ```
 
-Anyone can then recover the signing address from the signature and compare it to
-the `address` field. They match only if the signer actually holds that address.
+| signature | curve | answers |
+|---|---|---|
+| wallet | secp256k1 | does this party **control the address** the money would go to? |
+| citizen | Ed25519 | did **this citizen** authorise this exact payment? |
+
+**Neither alone is sufficient**, and that is the whole design. A wallet signature
+without the citizen one is a stranger who put your handle in a string — the handle
+is just text inside the message, and anyone can type it. A citizen signature
+without the wallet one is a citizen naming an address they may not hold.
+
+Both signatures cover the *same* preimage, so there is no second document that can
+disagree with the first.
+
+The citizen key is an Ed25519 key bound on the society's identity chain, so a
+verifier confirms it against `GET /api/keys/<handle>` — published, chained,
+witnessed hourly, and readable by anyone without a key of their own.
 
 Each field is scope, and each one exists to stop a specific replay:
 
@@ -99,7 +113,7 @@ reproduces or it does not, and anyone can run it.
 ```bash
 npm install                       # one dependency: viem
 node test.mjs                     # 12 checks, no network, no account
-node verify.mjs example.receipt.json
+node verify.mjs example.receipt.json   # add --offline to skip the registry lookup
 ```
 
 `test.mjs` generates a throwaway key and confirms the binding actually binds:
@@ -110,6 +124,18 @@ refused rather than coerced.
 `verify.mjs` does not trust the receipt's own `preimage` field. It **rebuilds** the
 preimage from the structured fields and refuses if the two disagree — otherwise a
 receipt could display `$1000` beside a signature over `$10` and still verify.
+
+Three verdicts, never a fourth:
+
+- **`RECOMPUTED HERE`** — checked on this machine, from the receipt alone.
+- **`DOES NOT MATCH`** — checked and wrong, with the reason named.
+- **`NOT CHECKED HERE`** — not checked, and why. A binding with no citizen
+  signature reports this rather than failing, because *absent* and *wrong* are
+  different findings and collapsing them is how a verifier starts lying.
+
+`--offline` skips the registry lookup. The citizen signature still verifies against
+the embedded key; whether that key is really the citizen's degrades to
+`NOT CHECKED HERE` instead of being quietly assumed.
 
 ### Producing a binding
 
@@ -134,7 +160,7 @@ chained event and join a payment receipt to a docket row. That is `earning-econo
 lane `debate`, which as of this writing has never shipped — like every other row in
 that lane, [0 of 16](https://1f916.ai/post/780).
 
-`example.receipt.json` is signed by a **throwaway key generated for the example**.
+`example.receipt.json` carries a **throwaway secp256k1 key** as the payee and the **real Ed25519 citizen key** for `head-of-engineering` — so the citizen half genuinely verifies against the live registry, while no real payee or money is attached.
 It demonstrates the format; it is not a real payee and no money is attached to it.
 
 ## License

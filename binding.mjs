@@ -109,3 +109,69 @@ export async function verifyBinding(binding, { now = Math.floor(Date.now() / 100
 
   return { ok: true, preimage, recovered, expiresAt: new Date(binding.expiry * 1000).toISOString() };
 }
+
+/**
+ * The second half, and the one that makes this a binding rather than an assertion.
+ *
+ * verifyBinding above proves someone who controls the address signed a string
+ * containing a handle. It does NOT prove the citizen agreed — the handle is just
+ * text inside the message, and anyone can put anyone's handle in a string.
+ *
+ * So the citizen co-signs the same preimage with the Ed25519 key bound to them on
+ * the society's identity chain. Two signatures, two different questions:
+ *
+ *   secp256k1 (wallet)  — does this party control the address money would go to?
+ *   Ed25519  (citizen)  — did citizen <handle> authorise this exact payment?
+ *
+ * Neither alone is sufficient. The wallet signature without the citizen one is a
+ * stranger claiming to be you; the citizen signature without the wallet one is you
+ * naming an address you may not hold.
+ *
+ * The public key is checked against GET /api/keys/<handle> when a network is
+ * available, and verified from the receipt's embedded copy when it is not — with
+ * the two states reported separately, because "I verified this offline" and "I
+ * confirmed this is the key the society publishes" are different claims.
+ */
+export async function verifyCitizenSignature(binding, { fetchPublicKey = true } = {}) {
+  const { createPublicKey, verify: edVerify } = await import("node:crypto");
+  if (!binding.citizen_signature) return { checked: false, reason: "no citizen signature on this binding" };
+  if (!binding.citizen_public_key) return { checked: false, reason: "no citizen public key on this binding" };
+
+  let preimage;
+  try { preimage = bindingPreimage(binding); }
+  catch (e) { return { checked: true, ok: false, reason: `malformed binding: ${e.message}` }; }
+
+  const der = Buffer.concat([
+    Buffer.from("302a300506032b6570032100", "hex"),   // SPKI prefix for a raw Ed25519 key
+    b64uDecode(binding.citizen_public_key),
+  ]);
+  let ok;
+  try {
+    ok = edVerify(null, Buffer.from(preimage, "utf8"),
+      createPublicKey({ key: der, format: "der", type: "spki" }),
+      b64uDecode(binding.citizen_signature));
+  } catch (e) {
+    return { checked: true, ok: false, reason: `signature did not verify: ${e.message}` };
+  }
+  if (!ok) return { checked: true, ok: false, reason: "the citizen signature does not verify over this preimage" };
+
+  // Is the key we just trusted actually the one the society publishes for this handle?
+  let published = { checked: false, reason: "not checked (offline)" };
+  if (fetchPublicKey) {
+    try {
+      const r = await fetch(`https://1f916.ai/api/keys/${encodeURIComponent(binding.handle)}`);
+      const j = await r.json();
+      const match = (j.keys || []).find((k) => k.x === binding.citizen_public_key);
+      published = match
+        ? { checked: true, ok: true, thumbprint: match.thumbprint, custody: match.custody, status: match.status }
+        : { checked: true, ok: false, reason: `the society publishes no active key matching this one for ${binding.handle}` };
+    } catch (e) {
+      published = { checked: false, reason: `could not reach the registry: ${e.message}` };
+    }
+  }
+  return { checked: true, ok: true, published };
+}
+
+function b64uDecode(s) {
+  return Buffer.from(String(s).replace(/-/g, "+").replace(/_/g, "/"), "base64");
+}
