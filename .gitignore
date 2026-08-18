@@ -2,3 +2,5 @@ node_modules/
 # The Bankr-signed receipt names a real wallet. Kept out of the repo on purpose;
 # example.receipt.json carries a throwaway key instead and proves the same thing.
 receipt.bankr.local.json
+# Bindings written by bind.mjs name a real wallet and a real filing.
+binding.*.json

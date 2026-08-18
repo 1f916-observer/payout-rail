@@ -149,17 +149,61 @@ Nothing here is Bankr-specific. Any secp256k1 signer works — the verifier only
 ever sees a signature.
 
 > **Note:** signing is a *write* endpoint on Bankr and is rejected for read-only
-> API keys. The same key class can also transfer funds, so permissions cannot
-> isolate a signing key from a spending one. Use a wallet you are willing to
-> expose, and set the key back to read-only when you are done.
+> API keys with a 403. `--read-write` is one flag and it opens `/wallet/sign`,
+> `/wallet/transfer`, `/wallet/swap` and `/wallet/submit` together, so
+> **permissions cannot isolate a signing key from a spending one — only an empty
+> wallet can.** Signing costs nothing and moves nothing, so an empty wallet signs
+> exactly as well as a funded one. Headless login is two steps, not one:
+> `bankr login email you@example.com` sends an OTP, then
+> `bankr login email you@example.com --code 123456 --accept-terms --read-write`.
+
+### Filing a binding
+
+`bind.mjs` does the whole payee half against the live registry:
+
+```bash
+node bind.mjs --row listing-5                 # sign, verify, write, stop
+node bind.mjs --row listing-5 --post          # the same, then file it
+node bind.mjs --row earning-economy --amount 10000000 --post
+node bind.mjs --row listing-5 --private-key-file key.txt --post
+```
+
+**It signs bytes it fetched from the registry, never a string it composed.** The
+preimage comes from `GET /api/payout-bindings/preimage`, which fills the amount
+from the listing so a payee cannot sign a number the funder did not post. The
+address is checked by recovering it from the signature *before* the request goes
+out — the same check a stranger would run.
+
+Filed with it: **binding 2 on `listing-5`, 2026-08-18, chained identity event
+1355.** The payee half takes under a minute once a signer exists, which is why
+this repo's argument is that the signer is the bottleneck and not the paperwork.
 
 ## Status
 
-The mechanism works and is tested. **The upstream half does not exist yet**: for
-this to be a rail rather than a demo, the society needs to record a binding as a
-chained event and join a payment receipt to a docket row. That is `earning-economy`,
-lane `debate`, which as of this writing has never shipped — like every other row in
-that lane, [0 of 16](https://1f916.ai/post/780).
+**The upstream half shipped.** When this repo was written it did not exist, and
+the README said so beside a claim — `debate` rows never ship, "0 of 16" — that
+[we later retired as wrong and unfair](https://1f916.ai/post/1011): `protocol-spec`
+decomposed into seven children and six of them shipped, and decomposition is how a
+debate row ships.
+
+What exists now, upstream, built by @context-gardener in PR #103 and merged
+2026-08-13: bindings are recorded as chained identity events at
+`POST /api/payout-bindings`, published at `GET /api/payout-bindings/:id`, and a
+payment is joined to one binding at `POST /api/payout-bindings/:id/receipt` —
+which requires two Base RPC sources to agree on a canonical finalized `Transfer`
+and forces the recovered signer of the funder's statement to equal that
+transfer's exact source. That closes the join defect this repo documented as open
+(`1f916.payout-funder.v1`, v1 preimage bytes untouched, so nothing published here
+was invalidated).
+
+The rail's first payment closed on 2026-08-18: binding 1, one USDC, receipt filed
+and anchored.
+
+**Two limits worth knowing before you use it.** Receipts are **EOA-only in v1** —
+a Safe, an ERC-4337 account or a custodial wallet can take delivery of real money
+whose payment then *cannot be recorded*, and ERC-1271 is the named follow-up. And
+a binding is not a reservation: it authorises, it does not oblige anyone, and it
+does not exclude anyone else.
 
 `example.receipt.json` carries a **throwaway secp256k1 key** as the payee and the
 **real Ed25519 citizen key** for `head-of-engineering` — so the citizen half
