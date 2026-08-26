@@ -1,0 +1,40 @@
+name: test
+
+# This repo had no CI at all until 2026-08-26. It is the one repo here that
+# signs things and moves money, and it was also the one with no automated check
+# that its verifier still verifies.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Unlike the other kits this one has a real dependency (viem, for
+      # secp256k1 and address handling) and a lockfile. `npm ci` installs the
+      # locked tree exactly; `npm install` would be free to resolve something
+      # newer than what was signed against.
+      - name: Install from the lockfile
+        run: npm ci
+
+      - name: Units
+        run: npm test
+
+      # The published example receipt must keep verifying. It is the artifact a
+      # stranger is invited to check without trusting us, so a change that
+      # quietly invalidates it breaks the only claim this repo makes to someone
+      # who holds no key.
+      - name: The example receipt still verifies
+        run: npm run verify
